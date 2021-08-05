@@ -19,6 +19,10 @@ type OutputCell struct {
 	Times  int
 }
 
+func Apply(target, double interface{}) *Patches {
+	return create().Apply(target, double)
+}
+
 func ApplyFunc(target, double interface{}) *Patches {
 	return create().ApplyFunc(target, double)
 }
@@ -53,6 +57,52 @@ func create() *Patches {
 
 func NewPatches() *Patches {
 	return create()
+}
+
+func (this *Patches) Apply(target, double interface{}) *Patches {
+	t := reflect.ValueOf(target)
+	d := reflect.ValueOf(double)
+
+	if t.Kind() == reflect.Func && d.Kind() == reflect.Func && t.Type() == d.Type() {
+		//mock function or method with a function
+		return this.ApplyCore(t, d)
+	}
+
+	if t.Kind() == reflect.Func && d.Kind() != reflect.Func {
+		tmp, ok := double.([]OutputCell)
+		if ok {
+			//mock function or method with an output sequence
+			funcType := reflect.TypeOf(target)
+			t := reflect.ValueOf(target)
+			d := getDoubleFunc(funcType, tmp)
+			return this.ApplyCore(t, d)
+		} else {
+			panic("invalid type of target or double")
+		}
+	}
+
+	if t.Type().Kind() == reflect.Ptr {
+		if t.Elem().Kind() != reflect.Func {
+			//mock global variable with value
+			this.values[t] = reflect.ValueOf(t.Elem().Interface())
+			d := reflect.ValueOf(double)
+			t.Elem().Set(d)
+			return this
+		} else {
+			tmp, ok := double.([]OutputCell)
+			if ok {
+				//mock function variable with an output sequence
+				funcType := reflect.TypeOf(target).Elem()
+				double := getDoubleFunc(funcType, tmp).Interface()
+				return this.ApplyGlobalVar(target, double)
+			} else {
+				panic("invalid type of target or double")
+			}
+		}
+	}
+
+	panic("invalid type of target or double")
+	return nil
 }
 
 func (this *Patches) ApplyFunc(target, double interface{}) *Patches {
